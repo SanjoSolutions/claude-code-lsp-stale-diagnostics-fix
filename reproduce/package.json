@@ -1,0 +1,8 @@
+{
+  "name": "lsp-stale-diagnostics-reproduce",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "typescript": "^6.0.2"
+  }
+}
