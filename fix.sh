@@ -9,7 +9,7 @@
 #   ./fix.sh           # Apply the patch
 #   ./fix.sh --revert  # Restore from backup
 #
-# Tested on: Claude Code 2.1.104
+# Tested on: Claude Code 2.1.104, 2.1.109
 #
 set -euo pipefail
 
@@ -59,20 +59,52 @@ if grep -q '__lspPendingDiag' "$CLI_JS"; then
 fi
 
 # --- Validate patch targets exist ---
-TARGETS=(
+TARGETS_V2_1_104=(
   'N(`LSP: Sent didChange for ${P}`)'
   'Np4({serverName:O,files:H}),N(`LSP Diagnostics: Registered'
   'getLSPDiagnosticAttachments called");try{let K=yp4()'
 )
 
-for marker in "${TARGETS[@]}"; do
+TARGETS_V2_1_109=(
+  'N(`LSP: Sent didChange for ${P}`)'
+  'sB4({serverName:O,files:H}),N(`LSP Diagnostics: Registered'
+  'getLSPDiagnosticAttachments called");try{let K=eB4()'
+  'let K=await ps.getNewDiagnostics()'
+)
+
+# Detect which version we're dealing with
+VERSION=""
+all_found=true
+for marker in "${TARGETS_V2_1_109[@]}"; do
   if ! grep -qF "$marker" "$CLI_JS"; then
-    echo "Error: Could not find expected code pattern."
-    echo "This patch may not be compatible with your Claude Code version."
-    echo "Missing: $marker"
-    exit 1
+    all_found=false
+    break
   fi
 done
+if $all_found; then
+  VERSION="v2_1_109"
+  TARGETS=("${TARGETS_V2_1_109[@]}")
+else
+  all_found=true
+  for marker in "${TARGETS_V2_1_104[@]}"; do
+    if ! grep -qF "$marker" "$CLI_JS"; then
+      all_found=false
+      break
+    fi
+  done
+  if $all_found; then
+    VERSION="v2_1_104"
+    TARGETS=("${TARGETS_V2_1_104[@]}")
+  fi
+fi
+
+if [ -z "$VERSION" ]; then
+  echo "Error: Could not find expected code patterns."
+  echo "This patch may not be compatible with your Claude Code version."
+  exit 1
+fi
+
+echo "Detected pattern version: $VERSION"
 
 # --- Backup ---
 cp "$CLI_JS" "$CLI_JS.bak"
@@ -84,10 +116,23 @@ echo "Backup saved to: $CLI_JS.bak"
 sed -i 's|N(`LSP: Sent didChange for ${P}`)|N(`LSP: Sent didChange for ${P}`);globalThis.__lspPendingDiag=new Promise(r=>{globalThis.__lspDiagResolve=r;setTimeout(r,5000)})|' "$CLI_JS"
 
 # 2. In publishDiagnostics handler: resolve the promise
-sed -i 's|Np4({serverName:O,files:H}),N(`LSP Diagnostics: Registered|Np4({serverName:O,files:H}),globalThis.__lspDiagResolve\&\&(globalThis.__lspDiagResolve(),globalThis.__lspDiagResolve=null),N(`LSP Diagnostics: Registered|' "$CLI_JS"
+if [ "$VERSION" = "v2_1_104" ]; then
+  sed -i 's|Np4({serverName:O,files:H}),N(`LSP Diagnostics: Registered|Np4({serverName:O,files:H}),globalThis.__lspDiagResolve\&\&(globalThis.__lspDiagResolve(),globalThis.__lspDiagResolve=null),N(`LSP Diagnostics: Registered|' "$CLI_JS"
+elif [ "$VERSION" = "v2_1_109" ]; then
+  sed -i 's|sB4({serverName:O,files:H}),N(`LSP Diagnostics: Registered|sB4({serverName:O,files:H}),globalThis.__lspDiagResolve\&\&(globalThis.__lspDiagResolve(),globalThis.__lspDiagResolve=null),N(`LSP Diagnostics: Registered|' "$CLI_JS"
+fi
 
 # 3. In getLSPDiagnosticAttachments: await the promise before reading
-sed -i 's|getLSPDiagnosticAttachments called");try{let K=yp4()|getLSPDiagnosticAttachments called");try{if(globalThis.__lspPendingDiag){await globalThis.__lspPendingDiag;globalThis.__lspPendingDiag=null}let K=yp4()|' "$CLI_JS"
+if [ "$VERSION" = "v2_1_104" ]; then
+  sed -i 's|getLSPDiagnosticAttachments called");try{let K=yp4()|getLSPDiagnosticAttachments called");try{if(globalThis.__lspPendingDiag){await globalThis.__lspPendingDiag;globalThis.__lspPendingDiag=null}let K=yp4()|' "$CLI_JS"
+elif [ "$VERSION" = "v2_1_109" ]; then
+  sed -i 's|getLSPDiagnosticAttachments called");try{let K=eB4()|getLSPDiagnosticAttachments called");try{if(globalThis.__lspPendingDiag){await globalThis.__lspPendingDiag;globalThis.__lspPendingDiag=null}let K=eB4()|' "$CLI_JS"
+fi
+
+# 4. In the new MCP-based diagnostic function (v2.1.109+): await the promise before querying
+if [ "$VERSION" = "v2_1_109" ]; then
+  sed -i 's|let K=await ps.getNewDiagnostics()|if(globalThis.__lspPendingDiag){await globalThis.__lspPendingDiag;globalThis.__lspPendingDiag=null}let K=await ps.getNewDiagnostics()|' "$CLI_JS"
+fi
 
 # --- Verify ---
 if ! grep -q '__lspPendingDiag' "$CLI_JS"; then

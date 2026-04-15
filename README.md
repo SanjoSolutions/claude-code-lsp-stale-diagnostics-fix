@@ -4,7 +4,7 @@ After file edits, Claude Code reads LSP diagnostics before the TypeScript langua
 
 Related issues: [#17979](https://github.com/anthropics/claude-code/issues/17979), [#41637](https://github.com/anthropics/claude-code/issues/41637)
 
-Tested on: Claude Code 2.1.104
+Tested on: Claude Code 2.1.104, 2.1.109
 
 ## The bug
 
@@ -104,11 +104,14 @@ With the fix applied, no phantom diagnostic errors appear after the edit.
 ./fix.sh
 ```
 
-The script patches `cli.js` in-place (with backup). It makes three changes:
+The script patches `cli.js` in-place (with backup). It auto-detects the Claude Code version and makes three or four changes:
 
 1. **After `textDocument/didChange`** — creates a promise that will resolve when diagnostics arrive (with a 5-second timeout safety net)
 2. **In the `publishDiagnostics` handler** — resolves the promise when fresh diagnostics are stored
 3. **In `getLSPDiagnosticAttachments`** — awaits the promise before reading the diagnostic registry
+4. **In the new MCP-based diagnostic function** (v2.1.109+) — awaits the promise before querying `getNewDiagnostics`
+
+Note: v2.1.109 added a second diagnostic code path that queries diagnostics via an MCP client (`getNewDiagnostics`), alongside the original registry-based path. Both paths need the wait.
 
 To revert:
 
