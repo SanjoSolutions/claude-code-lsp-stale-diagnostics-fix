@@ -1,9 +1,11 @@
 #!/bin/bash
 #
-# fix.sh — Patches Claude Code to fix stale TypeScript LSP diagnostics.
+# fix.sh — Patches Claude Code to fix stale TypeScript LSP diagnostics and symbols.
 #
-# Makes getLSPDiagnosticAttachments await the publishDiagnostics notification
-# instead of reading the registry immediately after file edits.
+# 1. Makes getLSPDiagnosticAttachments await the publishDiagnostics notification
+#    instead of reading the registry immediately after file edits.
+# 2. Fixes hardcoded version:1 in didOpen/didChange so the language server
+#    invalidates its documentSymbol (navtree) cache on edits.
 #
 # Usage:
 #   ./fix.sh           # Apply the patch
@@ -53,7 +55,10 @@ if [ "${1:-}" = "--revert" ]; then
 fi
 
 # --- Check if already patched ---
-if grep -q '__lspPendingDiag' "$CLI_JS"; then
+ALREADY_PATCHED=true
+grep -q '__lspPendingDiag' "$CLI_JS" || ALREADY_PATCHED=false
+grep -q '__lspDocVer' "$CLI_JS" || ALREADY_PATCHED=false
+if $ALREADY_PATCHED; then
   echo "Already patched. Nothing to do."
   exit 0
 fi
@@ -159,9 +164,24 @@ elif [ "$VERSION" = "v2_1_110" ]; then
   sed -i 's|let K=await st.getNewDiagnostics()|if(globalThis.__lspPendingDiag){await globalThis.__lspPendingDiag;globalThis.__lspPendingDiag=null}let K=await st.getNewDiagnostics()|' "$CLI_JS"
 fi
 
+# 5. Fix document version: replace hardcoded version:1 with a global counter
+#    so typescript-language-server invalidates its navtree/documentSymbol cache.
+#    These patterns are version-agnostic (LSP protocol structure, not minified names).
+if ! grep -q '__lspDocVer' "$CLI_JS"; then
+  # didChange: version:1 → incrementing counter
+  sed -i 's#version:1},contentChanges#version:(globalThis.__lspDocVer=(globalThis.__lspDocVer||0)+1)},contentChanges#' "$CLI_JS"
+  # didOpen: version:1 → incrementing counter
+  sed -i 's#version:1,text:#version:(globalThis.__lspDocVer=(globalThis.__lspDocVer||0)+1),text:#' "$CLI_JS"
+fi
+
 # --- Verify ---
 if ! grep -q '__lspPendingDiag' "$CLI_JS"; then
-  echo "Error: Patch verification failed. Restoring backup."
+  echo "Error: Diagnostics timing patch verification failed. Restoring backup."
+  cp "$CLI_JS.bak" "$CLI_JS"
+  exit 1
+fi
+if ! grep -q '__lspDocVer' "$CLI_JS"; then
+  echo "Error: Document version patch verification failed. Restoring backup."
   cp "$CLI_JS.bak" "$CLI_JS"
   exit 1
 fi
