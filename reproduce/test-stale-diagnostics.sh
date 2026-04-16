@@ -18,9 +18,9 @@ echo "Asking Claude to remove formatDate usage and check diagnostics..."
 echo ""
 
 claude -p "Do the following steps in order:
-1. Use the LSP tool to get diagnostics for src/app.ts and report them.
+1. Use the LSP tool to get diagnostics via \`documentSymbol\` for src/app.ts and report them.
 2. Edit src/app.ts to remove the lines that use formatDate (the const date line and the console.log(date) line). Also remove formatDate from the import.
-3. Immediately after editing, use the LSP tool again to get diagnostics for src/app.ts and report exactly what it says.
+3. Immediately after editing, use the LSP tool again via \`documentSymbol\` to get diagnostics for src/app.ts and report exactly what it says.
 Report the diagnostics from step 1 and step 3 verbatim." --output-format text
 
 echo ""

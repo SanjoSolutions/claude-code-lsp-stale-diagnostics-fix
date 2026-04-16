@@ -1,5 +1,8 @@
 # Stale TypeScript LSP Diagnostics and Symbols in Claude Code
 
+> [!NOTE]
+> Both bugs have been fixed with 2.1.111.
+
 Two bugs in Claude Code's LSP client cause stale results after file edits:
 
 1. **Stale diagnostics** — Claude reads LSP diagnostics before the TypeScript language server has finished processing the change, receiving phantom errors about code that no longer exists.
