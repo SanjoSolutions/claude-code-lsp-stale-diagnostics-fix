@@ -4,7 +4,7 @@ After file edits, Claude Code reads LSP diagnostics before the TypeScript langua
 
 Related issues: [#17979](https://github.com/anthropics/claude-code/issues/17979), [#41637](https://github.com/anthropics/claude-code/issues/41637)
 
-Tested on: Claude Code 2.1.104, 2.1.109
+Tested on: Claude Code 2.1.104, 2.1.109, 2.1.110
 
 ## The bug
 

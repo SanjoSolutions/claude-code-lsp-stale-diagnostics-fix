@@ -9,7 +9,7 @@
 #   ./fix.sh           # Apply the patch
 #   ./fix.sh --revert  # Restore from backup
 #
-# Tested on: Claude Code 2.1.104, 2.1.109
+# Tested on: Claude Code 2.1.104, 2.1.109, 2.1.110
 #
 set -euo pipefail
 
@@ -72,29 +72,48 @@ TARGETS_V2_1_109=(
   'let K=await ps.getNewDiagnostics()'
 )
 
+TARGETS_V2_1_110=(
+  'N(`LSP: Sent didChange for ${P}`)'
+  'PS4({serverName:O,files:H}),N(`LSP Diagnostics: Registered'
+  'getLSPDiagnosticAttachments called");try{let K=DS4()'
+  'let K=await st.getNewDiagnostics()'
+)
+
 # Detect which version we're dealing with
 VERSION=""
 all_found=true
-for marker in "${TARGETS_V2_1_109[@]}"; do
+for marker in "${TARGETS_V2_1_110[@]}"; do
   if ! grep -qF "$marker" "$CLI_JS"; then
     all_found=false
     break
   fi
 done
 if $all_found; then
-  VERSION="v2_1_109"
-  TARGETS=("${TARGETS_V2_1_109[@]}")
+  VERSION="v2_1_110"
+  TARGETS=("${TARGETS_V2_1_110[@]}")
 else
   all_found=true
-  for marker in "${TARGETS_V2_1_104[@]}"; do
+  for marker in "${TARGETS_V2_1_109[@]}"; do
     if ! grep -qF "$marker" "$CLI_JS"; then
       all_found=false
       break
     fi
   done
   if $all_found; then
-    VERSION="v2_1_104"
-    TARGETS=("${TARGETS_V2_1_104[@]}")
+    VERSION="v2_1_109"
+    TARGETS=("${TARGETS_V2_1_109[@]}")
+  else
+    all_found=true
+    for marker in "${TARGETS_V2_1_104[@]}"; do
+      if ! grep -qF "$marker" "$CLI_JS"; then
+        all_found=false
+        break
+      fi
+    done
+    if $all_found; then
+      VERSION="v2_1_104"
+      TARGETS=("${TARGETS_V2_1_104[@]}")
+    fi
   fi
 fi
 
@@ -120,6 +139,8 @@ if [ "$VERSION" = "v2_1_104" ]; then
   sed -i 's|Np4({serverName:O,files:H}),N(`LSP Diagnostics: Registered|Np4({serverName:O,files:H}),globalThis.__lspDiagResolve\&\&(globalThis.__lspDiagResolve(),globalThis.__lspDiagResolve=null),N(`LSP Diagnostics: Registered|' "$CLI_JS"
 elif [ "$VERSION" = "v2_1_109" ]; then
   sed -i 's|sB4({serverName:O,files:H}),N(`LSP Diagnostics: Registered|sB4({serverName:O,files:H}),globalThis.__lspDiagResolve\&\&(globalThis.__lspDiagResolve(),globalThis.__lspDiagResolve=null),N(`LSP Diagnostics: Registered|' "$CLI_JS"
+elif [ "$VERSION" = "v2_1_110" ]; then
+  sed -i 's|PS4({serverName:O,files:H}),N(`LSP Diagnostics: Registered|PS4({serverName:O,files:H}),globalThis.__lspDiagResolve\&\&(globalThis.__lspDiagResolve(),globalThis.__lspDiagResolve=null),N(`LSP Diagnostics: Registered|' "$CLI_JS"
 fi
 
 # 3. In getLSPDiagnosticAttachments: await the promise before reading
@@ -127,11 +148,15 @@ if [ "$VERSION" = "v2_1_104" ]; then
   sed -i 's|getLSPDiagnosticAttachments called");try{let K=yp4()|getLSPDiagnosticAttachments called");try{if(globalThis.__lspPendingDiag){await globalThis.__lspPendingDiag;globalThis.__lspPendingDiag=null}let K=yp4()|' "$CLI_JS"
 elif [ "$VERSION" = "v2_1_109" ]; then
   sed -i 's|getLSPDiagnosticAttachments called");try{let K=eB4()|getLSPDiagnosticAttachments called");try{if(globalThis.__lspPendingDiag){await globalThis.__lspPendingDiag;globalThis.__lspPendingDiag=null}let K=eB4()|' "$CLI_JS"
+elif [ "$VERSION" = "v2_1_110" ]; then
+  sed -i 's|getLSPDiagnosticAttachments called");try{let K=DS4()|getLSPDiagnosticAttachments called");try{if(globalThis.__lspPendingDiag){await globalThis.__lspPendingDiag;globalThis.__lspPendingDiag=null}let K=DS4()|' "$CLI_JS"
 fi
 
 # 4. In the new MCP-based diagnostic function (v2.1.109+): await the promise before querying
 if [ "$VERSION" = "v2_1_109" ]; then
   sed -i 's|let K=await ps.getNewDiagnostics()|if(globalThis.__lspPendingDiag){await globalThis.__lspPendingDiag;globalThis.__lspPendingDiag=null}let K=await ps.getNewDiagnostics()|' "$CLI_JS"
+elif [ "$VERSION" = "v2_1_110" ]; then
+  sed -i 's|let K=await st.getNewDiagnostics()|if(globalThis.__lspPendingDiag){await globalThis.__lspPendingDiag;globalThis.__lspPendingDiag=null}let K=await st.getNewDiagnostics()|' "$CLI_JS"
 fi
 
 # --- Verify ---
